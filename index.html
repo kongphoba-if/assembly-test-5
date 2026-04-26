@@ -1,36 +1,109 @@
-function updateAssembly(step) {
-    if (stepDisplay) stepDisplay.innerText = step;
-    
-    const nodes = getNodes();
-    if (nodes.length === 0) return;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Assembly Visualizer</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <style>
+        body { margin: 0; background: #ffffff; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        model-viewer { width: 100vw; height: 100vh; display: block; --progress-bar-color: #FF6B00; }
+        
+        .ui-panel {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 30px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.15); width: 300px; text-align: center; z-index: 1000;
+            backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3);
+        }
+        
+        .slider { width: 100%; accent-color: #FF6B00; margin: 15px 0; cursor: pointer; }
+        .label { color: #FF6B00; font-weight: 800; font-size: 20px; margin-bottom: 5px; letter-spacing: 1px; }
+        #status-bar { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
+        
+        /* Subtle loading state */
+        model-viewer:not(.ar-ready) .ui-panel { opacity: 0.7; pointer-events: none; }
+    </style>
+</head>
+<body>
 
-    nodes.forEach(node => {
-        const name = node.name || "";
-        if (name.toLowerCase().includes("part_")) {
-            const matches = name.match(/\d+/); 
-            if (matches) {
-                const partNum = parseInt(matches[0]);
-                
-                // THE FIX: Change <= to === 
-                // We only want to see the objects that belong EXACTLY to this step
-                const isVisible = (partNum === step);
-                
-                // Apply visibility to the node
-                node.visible = isVisible;
-                
-                // Deep toggle children (the 2 meshes inside your branches)
-                if (node.children) {
-                    node.children.forEach(child => {
-                        child.visible = isVisible;
-                    });
-                }
+    <model-viewer id="viewer" src="assembly.glb" ar ar-modes="webxr scene-viewer quick-look" 
+                  camera-controls environment-image="neutral" exposure="1.0" shadow-intensity="1">
+        <div class="ui-panel">
+            <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
+            <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
+            <div id="status-bar">Syncing Rhino Data...</div>
+        </div>
+    </model-viewer>
 
-                // Force scale to 0 for hidden steps so they don't interfere with lighting
-                if (node.scale) {
-                    const s = isVisible ? 1 : 0;
-                    node.scale.set(s, s, s);
-                }
+    <script>
+        const viewer = document.getElementById('viewer');
+        const slider = document.getElementById('assemblySlider');
+        const stepDisplay = document.getElementById('stepDisplay');
+        const statusBar = document.getElementById('status-bar');
+
+        // Unlocks the hidden Symbol-based hierarchy exported by Rhino 8
+        function getNodes() {
+            if (!viewer.model) return [];
+            const symbols = Object.getOwnPropertySymbols(viewer.model);
+            const hierarchySymbol = symbols.find(s => s.toString().includes('hierarchy'));
+            return viewer.model[hierarchySymbol] || viewer.model.nodes || [];
+        }
+
+        // Recursive function to ensure all child meshes in a branch are toggled
+        function toggleVisibility(node, isVisible) {
+            node.visible = isVisible;
+            if (node.mesh) node.mesh.visible = isVisible;
+            
+            // Handle the 2-mesh structure per branch
+            if (node.children) {
+                node.children.forEach(child => toggleVisibility(child, isVisible));
+            }
+
+            // Scale to 0 as a nuclear option for lighting/rendering conflicts
+            if (node.scale) {
+                const s = isVisible ? 1 : 0;
+                node.scale.set(s, s, s);
             }
         }
-    });
-}
+
+        function updateAssembly(step) {
+            stepDisplay.innerText = step;
+            const nodes = getNodes();
+
+            nodes.forEach(node => {
+                const name = node.name || "";
+                if (name.toLowerCase().includes("part_")) {
+                    const matches = name.match(/\d+/);
+                    if (matches) {
+                        const partNum = parseInt(matches[0]);
+                        
+                        // SINGLE-STEP LOGIC: 
+                        // Only show the specific layer that matches the slider value
+                        const isVisible = (partNum === step);
+                        toggleVisibility(node, isVisible);
+                    }
+                }
+            });
+        }
+
+        // Slider Interaction
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
+        });
+
+        // Initialize on model load
+        viewer.addEventListener('load', () => {
+            // Short delay to allow the scene graph to stabilize
+            setTimeout(() => {
+                const nodes = getNodes();
+                if (nodes.length > 0) {
+                    statusBar.innerText = "READY: " + nodes.length + " NODES UNLOCKED";
+                    updateAssembly(5); // Show final step by default
+                } else {
+                    statusBar.innerText = "ERROR: NO NAMED PARTS FOUND";
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>
