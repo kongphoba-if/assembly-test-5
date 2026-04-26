@@ -24,7 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Waiting for model...</div>
+            <div id="status-bar">Connecting to Model...</div>
         </div>
     </model-viewer>
 
@@ -37,19 +37,20 @@
         function updateAssembly(step) {
             stepDisplay.innerText = step;
             
-            // SAFETY CHECK: If model or nodes are not ready, don't try to loop!
-            if (!viewer.model || !viewer.model.nodes) {
-                console.log("Model not ready yet...");
-                return;
-            }
+            // Access the internal scene graph
+            const model = viewer.model;
+            if (!model) return;
 
-            viewer.model.nodes.forEach(node => {
+            // Deep scan through all nodes
+            model.nodes.forEach(node => {
                 const name = node.name || "";
-                // Look for "Part" (case insensitive)
+                
+                // Logic: Does the name contain 'part' and a number?
                 if (name.toLowerCase().includes("part")) {
-                    const matches = name.match(/\d+/); // Find the numbers
+                    const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
+                        // Show/Hide based on step
                         node.visible = (partNum <= step);
                     }
                 }
@@ -61,20 +62,36 @@
         });
 
         viewer.addEventListener('load', () => {
-            statusBar.innerText = "MODEL DOWNLOADED...";
+            statusBar.innerText = "Scanning Structure...";
             
-            // Retry logic: Check every 200ms until the nodes list is actually populated
-            const checkNodes = setInterval(() => {
-                if (viewer.model && viewer.model.nodes && viewer.model.nodes.length > 0) {
-                    clearInterval(checkNodes); // Stop checking
-                    
-                    const names = viewer.model.nodes.map(n => n.name).filter(n => n);
-                    console.log("Names Found:", names);
-                    
-                    statusBar.innerText = "READY: " + names.length + " NODES FOUND";
-                    updateAssembly(parseInt(slider.value));
+            // Check every 500ms until we find nodes with 'Part' in their name
+            const searchTimer = setInterval(() => {
+                if (viewer.model && viewer.model.nodes) {
+                    const foundParts = viewer.model.nodes.filter(n => 
+                        n.name && n.name.toLowerCase().includes("part")
+                    );
+
+                    if (foundParts.length > 0) {
+                        clearInterval(searchTimer);
+                        statusBar.innerText = "Ready: " + foundParts.length + " Parts Found";
+                        console.log("Structure detected:", foundParts.map(p => p.name));
+                        updateAssembly(parseInt(slider.value));
+                    } else {
+                        // Diagnostic: If we find nodes but NONE have the name 'Part'
+                        console.log("Nodes found, but no 'Part' names detected. Node names are:", 
+                                    viewer.model.nodes.map(n => n.name));
+                    }
                 }
-            }, 200);
+            }, 500);
+
+            // Timeout after 10 seconds if no parts are found
+            setTimeout(() => {
+                if (statusBar.innerText === "Scanning Structure...") {
+                    clearInterval(searchTimer);
+                    statusBar.innerText = "Error: No Parts Named 'Part_' Found";
+                    statusBar.style.color = "red";
+                }
+            }, 10000);
         });
     </script>
 </body>
