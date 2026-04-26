@@ -8,7 +8,6 @@
     <style>
         body { margin: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; }
         model-viewer { width: 100vw; height: 100vh; display: block; }
-        
         .ui-panel {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 25px;
@@ -25,33 +24,30 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status">INITIALIZING...</div>
+            <div id="status">CONNECTING...</div>
         </div>
     </model-viewer>
 
     <script>
-        // This wrapper ensures the HTML is 100% loaded before the script runs
         document.addEventListener('DOMContentLoaded', () => {
             const viewer = document.getElementById('viewer');
             const slider = document.getElementById('assemblySlider');
             const stepDisplay = document.getElementById('stepDisplay');
             const status = document.getElementById('status');
 
-            // Safety check: ensure elements exist
-            if (!slider || !viewer) {
-                console.error("Required UI elements not found!");
-                return;
-            }
-
             function updateAssembly(step) {
                 stepDisplay.innerText = step;
                 if (!viewer.model || !viewer.model.nodes) return;
 
+                console.log("Applying Visibility for Step: " + step);
+
                 viewer.model.nodes.forEach(node => {
+                    // Check for "Part_" in the name
                     if (node.name && node.name.toLowerCase().includes("part_")) {
                         const matches = node.name.match(/\d+/);
                         if (matches) {
                             const partNum = parseInt(matches[0]);
+                            // The Logic: Hide if Part Number > Current Step
                             node.visible = (partNum <= step);
                         }
                     }
@@ -62,21 +58,24 @@
                 updateAssembly(parseInt(e.target.value));
             });
 
+            // The "Persistence" Loop: Checks every 100ms if nodes are ready
             viewer.addEventListener('load', () => {
-                // Short delay to ensure 3D nodes are populated
-                setTimeout(() => {
-                    status.innerText = "MODEL LOADED SUCCESSFULLY";
-                    updateAssembly(parseInt(slider.value));
-                    
-                    // Log detected names to the console for your verification
-                    const names = viewer.model.nodes.map(n => n.name).filter(n => n);
-                    console.log("Detected Parts:", names);
+                status.innerText = "MODEL DOWNLOADED...";
+                
+                const checkNodes = setInterval(() => {
+                    if (viewer.model && viewer.model.nodes && viewer.model.nodes.length > 0) {
+                        clearInterval(checkNodes); // Stop checking once ready
+                        
+                        status.innerText = "READY: " + viewer.model.nodes.length + " NODES";
+                        
+                        // Debug log to see exactly what Rhino named the parts
+                        const names = viewer.model.nodes.map(n => n.name).filter(n => n);
+                        console.log("--- NAMES DETECTED ---");
+                        console.log(names);
+                        
+                        updateAssembly(parseInt(slider.value));
+                    }
                 }, 100);
-            });
-
-            viewer.addEventListener('error', (e) => {
-                status.innerText = "ERROR: assembly.glb NOT FOUND";
-                status.style.color = "red";
             });
         });
     </script>
