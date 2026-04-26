@@ -3,71 +3,75 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Assembly Sequence Test</title>
+    <title>Assembly Sequence Visualizer</title>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    
     <style>
         :root { color-scheme: light; }
-        body { margin: 0; background: #f4f4f4; overflow: hidden; font-family: sans-serif; }
-        model-viewer { width: 100vw; height: 100vh; background-color: #ffffff; }
-
-        .ui-panel {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            background: white; padding: 20px; border-radius: 25px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 280px; text-align: center; z-index: 100;
+        body { 
+            margin: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: #ffffff; 
+            overflow: hidden; 
         }
-        .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; }
-        .label { color: #FF6B00; font-weight: 900; font-size: 18px; text-transform: uppercase; }
+
+        model-viewer {
+            width: 100vw;
+            height: 100vh;
+            background-color: #ffffff;
+        }
+
+        /* The Control Panel */
+        .ui-panel {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            width: 280px;
+            text-align: center;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .label {
+            color: #FF6B00;
+            font-weight: 800;
+            font-size: 18px;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .slider {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #FF6B00;
+            height: 8px;
+            border-radius: 5px;
+            outline: none;
+        }
+
+        .sub-text {
+            font-size: 11px;
+            color: #888;
+            margin-top: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Clean up Vercel overlay if present */
+        #vercel-live-feedback, .vercel-toolbar { display: none !important; }
     </style>
 </head>
 <body>
 
     <model-viewer id="viewer" 
         src="assembly.glb" 
-        ar camera-controls 
-        environment-image="neutral" 
-        exposure="1.0" 
-        shadow-intensity="1">
-        
-        <div class="ui-panel">
-            <div class="label">Step: <span id="stepDisplay">5</span> / 5</div>
-            <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="debugName" style="font-size: 10px; color: #ccc; margin-top:5px;"></div>
-        </div>
-    </model-viewer>
-
-    <script>
-        const viewer = document.getElementById('viewer');
-        const slider = document.getElementById('assemblySlider');
-        const stepDisplay = document.getElementById('stepDisplay');
-
-        function updateAssembly(step) {
-            stepDisplay.innerText = step;
-            const model = viewer.model;
-            if (!model) return;
-
-            // Loop through our 5 parts
-            for (let i = 1; i <= 5; i++) {
-                const nodeName = "Part_" + i.toString().padStart(3, '0');
-                
-                // This line looks for the internal name from Rhino
-                const node = model.nodes.find(n => n.name === nodeName);
-                
-                if (node) {
-                    node.visible = (i <= step);
-                } else {
-                    // Debug: Tells us if the name is missing
-                    console.log("Could not find object named: " + nodeName);
-                }
-            }
-        }
-
-        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
-
-        viewer.addEventListener('load', () => {
-            // Log all names found in the file to the console (F12) to verify
-            console.log("Model Loaded. Names found:", viewer.model.nodes.map(n => n.name));
-            updateAssembly(5);
-        });
-    </script>
-</body>
-</html>
+        ar 
+        camera-controls 
+        touch-action="pan-y"
+        shadow
