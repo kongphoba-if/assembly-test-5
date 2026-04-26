@@ -24,62 +24,58 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Connecting...</div>
+            <div id="status-bar">Detecting Hierarchy...</div>
         </div>
     </model-viewer>
 
     <script>
-        // THIS WRAPPER IS THE FIX FOR THE BLANK SCREEN
-        window.addEventListener('DOMContentLoaded', () => {
-            
-            const viewer = document.getElementById('viewer');
-            const slider = document.getElementById('assemblySlider');
-            const stepDisplay = document.getElementById('stepDisplay');
-            const statusBar = document.getElementById('status-bar');
+        const viewer = document.getElementById('viewer');
+        const slider = document.getElementById('assemblySlider');
+        const stepDisplay = document.getElementById('stepDisplay');
+        const statusBar = document.getElementById('status-bar');
 
-            function updateAssembly(step) {
-                if (stepDisplay) stepDisplay.innerText = step;
-                if (!viewer.model || !viewer.model.nodes) return;
+        // This function finds the hidden "nodes" list using the Symbols we found in the console
+        function getNodes() {
+            if (!viewer.model) return [];
+            const symbols = Object.getOwnPropertySymbols(viewer.model);
+            const hierarchySym = symbols.find(s => s.toString().includes('hierarchy'));
+            return viewer.model.nodes || viewer.model[hierarchySym] || [];
+        }
 
-                viewer.model.nodes.forEach(node => {
-                    const name = node.name || "";
+        function updateAssembly(step) {
+            stepDisplay.innerText = step;
+            const nodes = getNodes();
+
+            nodes.forEach(node => {
+                const name = node.name || "";
+                if (name.toLowerCase().includes("part_")) {
+                    // This extracts the number from names like "Part_001" or "Part_001_1"
                     const matches = name.match(/\d+/); 
-                    
-                    if (name.toLowerCase().includes("part") && matches) {
+                    if (matches) {
                         const partNum = parseInt(matches[0]);
                         node.visible = (partNum <= step);
                     }
-                });
-            }
-
-            // The slider listener now only runs if the slider actually exists
-            if (slider) {
-                slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
-            }
-
-            viewer.addEventListener('load', () => {
-                statusBar.innerText = "Scanning Structure...";
-                
-                setTimeout(() => {
-                    if (viewer.model && viewer.model.nodes) {
-                        const allNames = viewer.model.nodes
-                            .map(n => n.name)
-                            .filter(name => name && name.length > 0);
-                        
-                        console.log("--- ALL NAMES FOUND IN GLB ---");
-                        console.log(allNames);
-
-                        const parts = allNames.filter(n => n.toLowerCase().includes("part"));
-                        
-                        if (parts.length > 0) {
-                            statusBar.innerText = "Ready: " + parts.length + " Parts Found";
-                            updateAssembly(parseInt(slider.value));
-                        } else {
-                            statusBar.innerText = "Error: No 'Part' names found!";
-                        }
-                    }
-                }, 500);
+                }
             });
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
+        });
+
+        viewer.addEventListener('load', () => {
+            // Wait 500ms for the internal hierarchy to finish building
+            setTimeout(() => {
+                const nodesFound = getNodes();
+                const parts = nodesFound.filter(n => n.name && n.name.includes("Part_"));
+                
+                if (parts.length > 0) {
+                    statusBar.innerText = "READY: " + parts.length + " SEQUENCE NODES";
+                    updateAssembly(parseInt(slider.value));
+                } else {
+                    statusBar.innerText = "ERROR: NO NAMED PARTS DETECTED";
+                }
+            }, 500);
         });
     </script>
 </body>
