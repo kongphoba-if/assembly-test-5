@@ -37,22 +37,18 @@
         const slider = document.getElementById('assemblySlider');
         const stepDisplay = document.getElementById('stepDisplay');
         
-        let cachedParts = []; // This is our "Quick List" to prevent lag
+        let cachedParts = []; 
 
         function initPerformanceCaching() {
             if (!viewer.model) return;
-            
-            // Find the hidden Symbol hierarchy
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hierarchySymbol = symbols.find(s => s.toString().includes('hierarchy'));
             const nodes = viewer.model[hierarchySymbol] || viewer.model.nodes || [];
 
-            // Pre-filter ONLY the parts we care about so we don't loop through junk
             cachedParts = nodes.filter(node => {
                 const name = node.name || "";
                 return name.toLowerCase().includes("part_");
             }).map(node => {
-                // Pre-calculate the part number for each node
                 const matches = node.name.match(/\d+/);
                 return {
                     node: node,
@@ -83,24 +79,27 @@
         function updateAssembly(step) {
             stepDisplay.innerText = step;
             
-            // Instead of searching the whole model, we use our cached "Quick List"
             cachedParts.forEach(item => {
                 const isVisible = (item.num === step);
                 toggleDeep(item.node, isVisible);
             });
+
+            // THE FIX: This forces the 3D viewer to re-render the pixels immediately
+            // without waiting for a user click or internal timer.
+            if (typeof viewer.queueRender === 'function') {
+                viewer.queueRender();
+            }
         }
 
         slider.addEventListener('input', (e) => {
-            // Use requestAnimationFrame to sync with the screen's refresh rate
-            requestAnimationFrame(() => {
-                updateAssembly(parseInt(e.target.value));
-            });
+            // We use direct execution here for maximum "snappiness"
+            updateAssembly(parseInt(e.target.value));
         });
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
                 applyMaterialPolish();
-                initPerformanceCaching(); // Build the fast list once
+                initPerformanceCaching();
                 updateAssembly(5); 
             }, 500);
         });
