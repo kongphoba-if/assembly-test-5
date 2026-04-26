@@ -16,7 +16,6 @@
         .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
         .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
         #status-bar { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; }
-        .hint { font-size: 9px; color: #bbb; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -25,8 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Initializing...</div>
-            <div class="hint">Tip: Click a part to see its name</div>
+            <div id="status-bar">Syncing Geometry...</div>
         </div>
     </model-viewer>
 
@@ -36,57 +34,51 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        function getNodes() {
+        // This function digs into the "Private" hierarchy of the 3D model
+        function getAllNodes() {
             if (!viewer.model) return [];
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-            return viewer.model.nodes || viewer.model[hSym] || [];
+            // Return the hidden hierarchy or the standard nodes list
+            return viewer.model[hSym] || viewer.model.nodes || [];
         }
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getNodes();
-            
+            const nodes = getAllNodes();
+
             nodes.forEach(node => {
                 const name = node.name || "";
+                // If it's part of our assembly sequence
                 if (name.toLowerCase().includes("part_")) {
                     const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
                         const isVisible = (partNum <= step);
 
-                        // METHOD 1: VISIBILITY
+                        // FORCE HIDE: We apply visibility to the node AND its mesh data
                         node.visible = isVisible;
-
-                        // METHOD 2: TELEPORTATION (The Fix)
-                        // If hidden, we move it 1000 units down. If shown, back to 0.
-                        if (node.translation) {
-                            const yPos = isVisible ? 0 : -1000;
-                            node.translation.set(node.translation.x, yPos, node.translation.z);
+                        
+                        // We also set the scale to 0 as a backup. 
+                        // If it refuses to be "invisible", it will be too small to see.
+                        if (node.scale) {
+                            const s = isVisible ? 1 : 0;
+                            node.scale.set(s, s, s);
                         }
                     }
                 }
             });
         }
 
-        // TOOL: CLICK TO IDENTIFY
-        viewer.addEventListener('click', (event) => {
-            const hit = viewer.positionAndNormalFromPoint(event.clientX, event.clientY);
-            if (hit) {
-                // We ask model-viewer what we just clicked
-                const part = viewer.queryHotspot(event); // Simple way to get node info
-                // Better way: Check the console for the last clicked object
-                console.log("You clicked on a part. Check the hierarchy for its name.");
-            }
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
         });
-
-        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                const nodes = getNodes();
-                statusBar.innerText = "READY: " + nodes.length + " NODES SYNCED";
-                updateAssembly(5);
+                const nodes = getAllNodes();
+                statusBar.innerText = "READY: " + nodes.length + " OBJECTS TRACKED";
+                updateAssembly(5); // Start with full model
             }, 800);
         });
     </script>
