@@ -1,86 +1,36 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Assembly Visualizer</title>
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
-    <style>
-        body { margin: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; }
-        model-viewer { width: 100vw; height: 100vh; display: block; }
-        .ui-panel {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 25px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 280px; text-align: center; z-index: 1000;
-        }
-        .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
-        .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
-        #status-bar { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; }
-    </style>
-</head>
-<body>
+function updateAssembly(step) {
+    if (stepDisplay) stepDisplay.innerText = step;
+    
+    const nodes = getNodes();
+    if (nodes.length === 0) return;
 
-    <model-viewer id="viewer" src="assembly.glb" ar camera-controls environment-image="neutral" exposure="1.0">
-        <div class="ui-panel">
-            <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
-            <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Synchronizing Scene Graph...</div>
-        </div>
-    </model-viewer>
-
-    <script>
-        const viewer = document.getElementById('viewer');
-        const slider = document.getElementById('assemblySlider');
-        const stepDisplay = document.getElementById('stepDisplay');
-        const statusBar = document.getElementById('status-bar');
-
-        // This is the "Drill" that hides everything inside a node
-        function deepHide(node, isVisible) {
-            node.visible = isVisible;
-            // If it's a mesh, hide the actual geometry
-            if (node.mesh) node.mesh.visible = isVisible;
-            // If it has children, hide them too
-            if (node.children) {
-                node.children.forEach(child => deepHide(child, isVisible));
-            }
-            // Secondary 'Nuclear' option: move it underground if hidden
-            if (node.translation) {
-                if (node.origY === undefined) node.origY = node.translation.y;
-                node.translation.set(node.translation.x, isVisible ? node.origY : -1000, node.translation.z);
-            }
-        }
-
-        function updateAssembly(step) {
-            stepDisplay.innerText = step;
-            if (!viewer.model) return;
-
-            const symbols = Object.getOwnPropertySymbols(viewer.model);
-            const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-            const nodes = viewer.model.nodes || viewer.model[hSym] || [];
-
-            nodes.forEach(node => {
-                const name = node.name || "";
-                if (name.toLowerCase().includes("part_")) {
-                    const matches = name.match(/\d+/);
-                    if (matches) {
-                        const partNum = parseInt(matches[0]);
-                        deepHide(node, partNum <= step);
-                    }
+    nodes.forEach(node => {
+        const name = node.name || "";
+        if (name.toLowerCase().includes("part_")) {
+            const matches = name.match(/\d+/); 
+            if (matches) {
+                const partNum = parseInt(matches[0]);
+                
+                // THE FIX: Change <= to === 
+                // We only want to see the objects that belong EXACTLY to this step
+                const isVisible = (partNum === step);
+                
+                // Apply visibility to the node
+                node.visible = isVisible;
+                
+                // Deep toggle children (the 2 meshes inside your branches)
+                if (node.children) {
+                    node.children.forEach(child => {
+                        child.visible = isVisible;
+                    });
                 }
-            });
+
+                // Force scale to 0 for hidden steps so they don't interfere with lighting
+                if (node.scale) {
+                    const s = isVisible ? 1 : 0;
+                    node.scale.set(s, s, s);
+                }
+            }
         }
-
-        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
-
-        viewer.addEventListener('load', () => {
-            setTimeout(() => {
-                const symbols = Object.getOwnPropertySymbols(viewer.model);
-                const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-                const nodes = viewer.model.nodes || viewer.model[hSym] || [];
-                statusBar.innerText = "READY: " + nodes.length + " OBJECTS SYNCED";
-                updateAssembly(5);
-            }, 800);
-        });
-    </script>
-</body>
-</html>
+    });
+}
