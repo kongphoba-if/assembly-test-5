@@ -24,7 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Syncing Hidden Hierarchy...</div>
+            <div id="status-bar">Synchronizing Scene Graph...</div>
         </div>
     </model-viewer>
 
@@ -34,55 +34,52 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
+        // This is the "Drill" that hides everything inside a node
+        function deepHide(node, isVisible) {
+            node.visible = isVisible;
+            // If it's a mesh, hide the actual geometry
+            if (node.mesh) node.mesh.visible = isVisible;
+            // If it has children, hide them too
+            if (node.children) {
+                node.children.forEach(child => deepHide(child, isVisible));
+            }
+            // Secondary 'Nuclear' option: move it underground if hidden
+            if (node.translation) {
+                if (node.origY === undefined) node.origY = node.translation.y;
+                node.translation.set(node.translation.x, isVisible ? node.origY : -1000, node.translation.z);
+            }
+        }
+
         function updateAssembly(step) {
             stepDisplay.innerText = step;
             if (!viewer.model) return;
 
-            // ACCESS THE HIDDEN DRAWER:
-            // Find all Symbols on the model object
             const symbols = Object.getOwnPropertySymbols(viewer.model);
-            // Look for the specific one that holds the hierarchy
-            const hierarchySymbol = symbols.find(s => s.toString().includes('hierarchy'));
-            
-            if (hierarchySymbol) {
-                const nodes = viewer.model[hierarchySymbol];
-                nodes.forEach(node => {
-                    const name = node.name || "";
-                    if (name.toLowerCase().includes("part_")) {
-                        const matches = name.match(/\d+/);
-                        if (matches) {
-                            const partNum = parseInt(matches[0]);
-                            const isVisible = (partNum <= step);
-                            
-                            // Apply visibility
-                            node.visible = isVisible;
-                            // Apply scale (secondary safety)
-                            if (node.scale) {
-                                const s = isVisible ? 1 : 0.0001;
-                                node.scale.set(s, s, s);
-                            }
-                        }
+            const hSym = symbols.find(s => s.toString().includes('hierarchy'));
+            const nodes = viewer.model.nodes || viewer.model[hSym] || [];
+
+            nodes.forEach(node => {
+                const name = node.name || "";
+                if (name.toLowerCase().includes("part_")) {
+                    const matches = name.match(/\d+/);
+                    if (matches) {
+                        const partNum = parseInt(matches[0]);
+                        deepHide(node, partNum <= step);
                     }
-                });
-            }
+                }
+            });
         }
 
-        slider.addEventListener('input', (e) => {
-            updateAssembly(parseInt(e.target.value));
-        });
+        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
 
         viewer.addEventListener('load', () => {
-            // Wait briefly for the engine to finish indexing the symbols
             setTimeout(() => {
                 const symbols = Object.getOwnPropertySymbols(viewer.model);
                 const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-                if (hSym && viewer.model[hSym]) {
-                    statusBar.innerText = "READY: " + viewer.model[hSym].length + " NODES UNLOCKED";
-                    updateAssembly(5);
-                } else {
-                    statusBar.innerText = "ERROR: SYSTEM LOCKED";
-                }
-            }, 500);
+                const nodes = viewer.model.nodes || viewer.model[hSym] || [];
+                statusBar.innerText = "READY: " + nodes.length + " OBJECTS SYNCED";
+                updateAssembly(5);
+            }, 800);
         });
     </script>
 </body>
