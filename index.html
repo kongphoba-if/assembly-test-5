@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Assembly Visualizer</title>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
@@ -10,8 +10,7 @@
         model-viewer { width: 100vw; height: 100vh; display: block; }
         .ui-panel {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 25px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 280px; text-align: center; z-index: 1000;
+            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 280px; text-align: center; z-index: 1000;
         }
         .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
         .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
@@ -24,7 +23,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Syncing Mesh Geometry...</div>
+            <div id="status-bar">Connecting to Model...</div>
         </div>
     </model-viewer>
 
@@ -35,10 +34,14 @@
         const statusBar = document.getElementById('status-bar');
 
         function updateAssembly(step) {
-            stepDisplay.innerText = step;
-            if (!viewer.model) return;
+            if (stepDisplay) stepDisplay.innerText = step;
+            
+            // SAFETY CHECK: If the model or nodes aren't loaded, exit the function
+            if (!viewer.model || !viewer.model.nodes) {
+                console.log("Nodes not ready for slider yet...");
+                return;
+            }
 
-            // We use a deep traversal to find every single mesh, even those hidden in groups
             viewer.model.nodes.forEach(node => {
                 const name = node.name || "";
                 if (name.toLowerCase().includes("part_")) {
@@ -46,22 +49,11 @@
                     if (matches) {
                         const partNum = parseInt(matches[0]);
                         const isVisible = (partNum <= step);
-
-                        // METHOD 1: VISIBILITY
+                        
                         node.visible = isVisible;
-
-                        // METHOD 2: SCALE (Shrink to zero)
                         if (node.scale) {
                             const s = isVisible ? 1 : 0.0001;
                             node.scale.set(s, s, s);
-                        }
-
-                        // METHOD 3: TRANSLATION (Move underground)
-                        if (node.translation) {
-                            // Store the original Y position once so we can return to it
-                            if (node.origY === undefined) node.origY = node.translation.y;
-                            const yPos = isVisible ? node.origY : -500;
-                            node.translation.set(node.translation.x, yPos, node.translation.z);
                         }
                     }
                 }
@@ -71,11 +63,19 @@
         slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
 
         viewer.addEventListener('load', () => {
-            setTimeout(() => {
-                const count = viewer.model.nodes.length;
-                statusBar.innerText = "READY: " + count + " NODES SYNCED";
-                updateAssembly(5);
-            }, 500);
+            statusBar.innerText = "Scanning Hierarchy...";
+            
+            // Check every 200ms until the 'nodes' array actually exists
+            const checkInterval = setInterval(() => {
+                if (viewer.model && viewer.model.nodes && viewer.model.nodes.length > 0) {
+                    clearInterval(checkInterval); // Stop checking
+                    
+                    const count = viewer.model.nodes.length;
+                    statusBar.innerText = "READY: " + count + " NODES SYNCED";
+                    console.log("Sync Complete. Found nodes:", viewer.model.nodes);
+                    updateAssembly(5);
+                }
+            }, 200);
         });
     </script>
 </body>
