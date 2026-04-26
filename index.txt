@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>5-Step Assembly Test</title>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+    <style>
+        :root { color-scheme: light; }
+        body { margin: 0; font-family: sans-serif; background: #ffffff; overflow: hidden; }
+        model-viewer { width: 100vw; height: 100vh; background-color: #ffffff; }
+
+        .ui-panel {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 20px;
+            border-radius: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 260px;
+            text-align: center;
+            z-index: 100;
+        }
+
+        .slider {
+            width: 100%;
+            accent-color: #FF6B00;
+            margin: 10px 0;
+        }
+
+        .label {
+            color: #FF6B00;
+            font-weight: 900;
+            font-size: 20px;
+        }
+
+        /* Hide Vercel Toolbar */
+        #vercel-live-feedback, .vercel-toolbar { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <model-viewer id="viewer" src="assembly.glb" ar camera-controls touch-action="pan-y">
+        <div class="ui-panel">
+            <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
+            <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
+        </div>
+    </model-viewer>
+
+    <script>
+        const viewer = document.getElementById('viewer');
+        const slider = document.getElementById('assemblySlider');
+        const stepDisplay = document.getElementById('stepDisplay');
+
+        function updateAssembly(step) {
+            stepDisplay.innerText = step;
+            if (!viewer.model) return;
+
+            for (let i = 1; i <= 5; i++) {
+                // Must match the object names in Rhino (Part_001, etc.)
+                const nodeName = "Part_" + i.toString().padStart(3, '0');
+                const node = viewer.model.nodes.find(n => n.name === nodeName);
+                if (node) {
+                    node.visible = (i <= step);
+                }
+            }
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
+        });
+
+        viewer.addEventListener('load', () => {
+            updateAssembly(5);
+        });
+    </script>
+</body>
+</html>
