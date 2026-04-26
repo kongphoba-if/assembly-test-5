@@ -3,75 +3,69 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Assembly Sequence Visualizer</title>
+    <title>Assembly Visualizer</title>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
-    
     <style>
-        :root { color-scheme: light; }
-        body { 
-            margin: 0; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-            background: #ffffff; 
-            overflow: hidden; 
-        }
-
-        model-viewer {
-            width: 100vw;
-            height: 100vh;
-            background-color: #ffffff;
-        }
-
-        /* The Control Panel */
+        body { margin: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; }
+        model-viewer { width: 100vw; height: 100vh; }
+        
+        /* Fixed UI Panel - Ensuring it's always visible */
         .ui-panel {
-            position: absolute;
-            bottom: 40px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 20px;
-            border-radius: 30px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.15);
-            width: 280px;
-            text-align: center;
-            z-index: 100;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 280px; text-align: center; z-index: 999;
         }
-
-        .label {
-            color: #FF6B00;
-            font-weight: 800;
-            font-size: 18px;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-        }
-
-        .slider {
-            width: 100%;
-            cursor: pointer;
-            accent-color: #FF6B00;
-            height: 8px;
-            border-radius: 5px;
-            outline: none;
-        }
-
-        .sub-text {
-            font-size: 11px;
-            color: #888;
-            margin-top: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        /* Clean up Vercel overlay if present */
-        #vercel-live-feedback, .vercel-toolbar { display: none !important; }
+        .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
+        .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
+        #status { font-size: 10px; color: #999; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
-    <model-viewer id="viewer" 
-        src="assembly.glb" 
-        ar 
-        camera-controls 
-        touch-action="pan-y"
-        shadow
+    <model-viewer id="viewer" src="assembly.glb" ar camera-controls environment-image="neutral" exposure="1.0">
+        <div class="ui-panel">
+            <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
+            <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
+            <div id="status">Waiting for model...</div>
+        </div>
+    </model-viewer>
+
+    <script>
+        const viewer = document.getElementById('viewer');
+        const slider = document.getElementById('assemblySlider');
+        const stepDisplay = document.getElementById('stepDisplay');
+        const status = document.getElementById('status');
+
+        function updateAssembly(step) {
+            stepDisplay.innerText = step;
+            if (!viewer.model) return;
+
+            // Fuzzy search through all nodes
+            viewer.model.nodes.forEach(node => {
+                if (node.name && node.name.includes("Part_")) {
+                    const parts = node.name.split('_');
+                    const num = parseInt(parts[parts.length - 1]);
+                    if (!isNaN(num)) {
+                        node.visible = (num <= step);
+                    }
+                }
+            });
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
+        });
+
+        viewer.addEventListener('load', () => {
+            status.innerText = "Model Loaded Successfully";
+            console.log("Nodes found:", viewer.model.nodes.map(n => n.name));
+            updateAssembly(5);
+        });
+
+        viewer.addEventListener('error', (e) => {
+            status.innerText = "Error: Cannot find assembly.glb";
+            status.style.color = "red";
+        });
+    </script>
+</body>
+</html>
