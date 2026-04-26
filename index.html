@@ -15,7 +15,7 @@
         }
         .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
         .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
-        #status { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+        #status-bar { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -24,59 +24,56 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status">CONNECTING...</div>
+            <div id="status-bar">Detecting Parts...</div>
         </div>
     </model-viewer>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const viewer = document.getElementById('viewer');
-            const slider = document.getElementById('assemblySlider');
-            const stepDisplay = document.getElementById('stepDisplay');
-            const status = document.getElementById('status');
+        const viewer = document.getElementById('viewer');
+        const slider = document.getElementById('assemblySlider');
+        const stepDisplay = document.getElementById('stepDisplay');
+        const statusBar = document.getElementById('status-bar');
 
-            function updateAssembly(step) {
-                stepDisplay.innerText = step;
-                if (!viewer.model || !viewer.model.nodes) return;
+        function updateAssembly(step) {
+            stepDisplay.innerText = step;
+            if (!viewer.model) return;
 
-                console.log("Applying Visibility for Step: " + step);
-
-                viewer.model.nodes.forEach(node => {
-                    // Check for "Part_" in the name
-                    if (node.name && node.name.toLowerCase().includes("part_")) {
-                        const matches = node.name.match(/\d+/);
-                        if (matches) {
-                            const partNum = parseInt(matches[0]);
-                            // The Logic: Hide if Part Number > Current Step
-                            node.visible = (partNum <= step);
-                        }
-                    }
-                });
-            }
-
-            slider.addEventListener('input', (e) => {
-                updateAssembly(parseInt(e.target.value));
-            });
-
-            // The "Persistence" Loop: Checks every 100ms if nodes are ready
-            viewer.addEventListener('load', () => {
-                status.innerText = "MODEL DOWNLOADED...";
+            // We loop through EVERY part of the model's internal tree
+            viewer.model.nodes.forEach(node => {
+                const name = node.name || "";
                 
-                const checkNodes = setInterval(() => {
-                    if (viewer.model && viewer.model.nodes && viewer.model.nodes.length > 0) {
-                        clearInterval(checkNodes); // Stop checking once ready
-                        
-                        status.innerText = "READY: " + viewer.model.nodes.length + " NODES";
-                        
-                        // Debug log to see exactly what Rhino named the parts
-                        const names = viewer.model.nodes.map(n => n.name).filter(n => n);
-                        console.log("--- NAMES DETECTED ---");
-                        console.log(names);
-                        
-                        updateAssembly(parseInt(slider.value));
+                // If the name contains "Part_" (Rhino Layers or Object Names)
+                if (name.toLowerCase().includes("part_")) {
+                    const matches = name.match(/\d+/); // Find any number (001, 002...)
+                    if (matches) {
+                        const partNum = parseInt(matches[0]);
+                        node.visible = (partNum <= step);
                     }
-                }, 100);
+                }
             });
+        }
+
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
+        });
+
+        // This event waits for the 3D data to be fully ready
+        viewer.addEventListener('load', () => {
+            // Give it 200ms to build the node list properly
+            setTimeout(() => {
+                if (viewer.model && viewer.model.nodes) {
+                    const parts = viewer.model.nodes.filter(n => n.name && n.name.includes("Part_"));
+                    statusBar.innerText = "Found " + parts.length + " Sequence Parts";
+                    
+                    // Initial run to set the slider position
+                    updateAssembly(parseInt(slider.value));
+                    
+                    // Log to console so you can see the names found
+                    console.log("Detected names:", parts.map(p => p.name));
+                } else {
+                    statusBar.innerText = "Error: No Parts Detected";
+                }
+            }, 200);
         });
     </script>
 </body>
