@@ -16,6 +16,7 @@
         .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
         .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
         #status-bar { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 1px; }
+        .hint { font-size: 9px; color: #bbb; margin-top: 5px; }
     </style>
 </head>
 <body>
@@ -24,7 +25,8 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Syncing Scene...</div>
+            <div id="status-bar">Initializing...</div>
+            <div class="hint">Tip: Click a part to see its name</div>
         </div>
     </model-viewer>
 
@@ -34,64 +36,57 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        function getModelNodes() {
+        function getNodes() {
             if (!viewer.model) return [];
-            // Try standard nodes list first
-            if (viewer.model.nodes && viewer.model.nodes.length > 0) return viewer.model.nodes;
-            // Fallback to internal hierarchy symbol if the public API is empty
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-            return viewer.model[hSym] || [];
+            return viewer.model.nodes || viewer.model[hSym] || [];
         }
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getModelNodes();
-            if (nodes.length === 0) return;
-
-            console.log("--- UPDATING TO STEP " + step + " ---");
-
+            const nodes = getNodes();
+            
             nodes.forEach(node => {
                 const name = node.name || "";
                 if (name.toLowerCase().includes("part_")) {
-                    const matches = name.match(/\d+/); 
+                    const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
                         const isVisible = (partNum <= step);
-                        
-                        // 1. Set Visibility (Standard)
-                        node.visible = isVisible;
-                        
-                        // 2. Set Scale (The "Aggressive" Fix)
-                        // If it should be hidden, we shrink it to 0. If shown, back to 1.
-                        if (node.scale) {
-                            const s = isVisible ? 1 : 0;
-                            node.scale.set(s, s, s);
-                        }
 
-                        // Log to console so you can verify it's working
-                        if (!isVisible) console.log("Hiding Part: " + name);
+                        // METHOD 1: VISIBILITY
+                        node.visible = isVisible;
+
+                        // METHOD 2: TELEPORTATION (The Fix)
+                        // If hidden, we move it 1000 units down. If shown, back to 0.
+                        if (node.translation) {
+                            const yPos = isVisible ? 0 : -1000;
+                            node.translation.set(node.translation.x, yPos, node.translation.z);
+                        }
                     }
                 }
             });
         }
 
-        slider.addEventListener('input', (e) => {
-            updateAssembly(parseInt(e.target.value));
+        // TOOL: CLICK TO IDENTIFY
+        viewer.addEventListener('click', (event) => {
+            const hit = viewer.positionAndNormalFromPoint(event.clientX, event.clientY);
+            if (hit) {
+                // We ask model-viewer what we just clicked
+                const part = viewer.queryHotspot(event); // Simple way to get node info
+                // Better way: Check the console for the last clicked object
+                console.log("You clicked on a part. Check the hierarchy for its name.");
+            }
         });
+
+        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                const nodes = getModelNodes();
-                const parts = nodes.filter(n => n.name && n.name.includes("Part_"));
-                
-                if (parts.length > 0) {
-                    statusBar.innerText = "READY: " + parts.length + " NODES SYNCED";
-                    // Set initial state (show all)
-                    updateAssembly(5);
-                } else {
-                    statusBar.innerText = "ERROR: CHECK RHINO NAMES";
-                }
+                const nodes = getNodes();
+                statusBar.innerText = "READY: " + nodes.length + " NODES SYNCED";
+                updateAssembly(5);
             }, 800);
         });
     </script>
