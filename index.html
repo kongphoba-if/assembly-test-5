@@ -7,16 +7,17 @@
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
         body { margin: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; }
-        model-viewer { width: 100vw; height: 100vh; display: block; --progress-bar-color: #FF6B00; }
-        
+        /* A subtle gradient background makes the model edges look sharper than pure white */
+        model-viewer { 
+            width: 100vw; height: 100vh; display: block; 
+            background: radial-gradient(circle, #ffffff 0%, #f0f0f0 100%);
+        }
         .ui-panel {
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             background: rgba(255, 255, 255, 0.95); padding: 25px; border-radius: 30px;
             box-shadow: 0 15px 50px rgba(0,0,0,0.15); width: 300px; text-align: center; 
             z-index: 1000; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3);
-            /* REMOVED the pointer-events: none line that was locking the slider */
         }
-        
         .slider { width: 100%; accent-color: #FF6B00; margin: 15px 0; cursor: pointer; }
         .label { color: #FF6B00; font-weight: 800; font-size: 20px; margin-bottom: 5px; }
         #status-bar { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
@@ -25,7 +26,8 @@
 <body>
 
     <model-viewer id="viewer" src="assembly.glb" ar ar-modes="webxr scene-viewer quick-look" 
-                  camera-controls environment-image="neutral" exposure="1.0" shadow-intensity="1">
+                  camera-controls environment-image="legacy" exposure="1.2" 
+                  shadow-intensity="2" shadow-softness="0.5">
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
@@ -44,6 +46,22 @@
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hierarchySymbol = symbols.find(s => s.toString().includes('hierarchy'));
             return viewer.model[hierarchySymbol] || viewer.model.nodes || [];
+        }
+
+        // CHEAT: This forces the materials to be "Metallic-Rough" 
+        // which helps them catch light on the edges even if they are just flat colors.
+        function applyMaterialPolish() {
+            if (!viewer.model) return;
+            viewer.model.materials.forEach(mat => {
+                // Adjusting roughness and metalness creates natural gradients on faces
+                mat.pbrMetallicRoughness.setRoughnessFactor(0.4); 
+                mat.pbrMetallicRoughness.setBaseColorFactor([
+                    mat.pbrMetallicRoughness.baseColorFactor[0],
+                    mat.pbrMetallicRoughness.baseColorFactor[1],
+                    mat.pbrMetallicRoughness.baseColorFactor[2],
+                    1.0 // Ensure full opacity
+                ]);
+            });
         }
 
         function toggleVisibility(node, isVisible) {
@@ -80,12 +98,11 @@
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
+                applyMaterialPolish(); // Apply the visual "cheat"
                 const nodes = getNodes();
                 if (nodes.length > 0) {
                     statusBar.innerText = "READY: " + nodes.length + " NODES UNLOCKED";
                     updateAssembly(5); 
-                } else {
-                    statusBar.innerText = "ERROR: NO NAMED PARTS FOUND";
                 }
             }, 500);
         });
