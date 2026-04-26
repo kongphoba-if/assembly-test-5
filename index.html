@@ -24,7 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Syncing Geometry...</div>
+            <div id="status-bar">Syncing Mesh Hierarchy...</div>
         </div>
     </model-viewer>
 
@@ -34,37 +34,44 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        // Finds the hidden part list inside the model
-        function getNodes() {
+        function getModelNodes() {
             if (!viewer.model) return [];
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hSym = symbols.find(s => s.toString().includes('hierarchy'));
             return viewer.model.nodes || viewer.model[hSym] || [];
         }
 
-        // RECURSIVE HIDE: This forces the node AND all its hidden children to hide
-        function toggleNode(node, isVisible) {
+        // THE GHOST FUNCTION: Reaches deep into the mesh and hides the actual material
+        function forceVisibility(node, isVisible) {
             node.visible = isVisible;
-            // If the node has children (sub-meshes), we force them too
+            
+            // If the node has children (your 2 objects per layer), hide them too
             if (node.children) {
-                node.children.forEach(child => toggleNode(child, isVisible));
+                node.children.forEach(child => forceVisibility(child, isVisible));
             }
         }
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getNodes();
+            const nodes = getModelNodes();
+            if (nodes.length === 0) return;
 
             nodes.forEach(node => {
                 const name = node.name || "";
                 if (name.toLowerCase().includes("part_")) {
-                    const matches = name.match(/\d+/);
+                    const matches = name.match(/\d+/); 
                     if (matches) {
                         const partNum = parseInt(matches[0]);
-                        const show = (partNum <= step);
+                        const isVisible = (partNum <= step);
                         
-                        // Apply the recursive toggle
-                        toggleNode(node, show);
+                        // Apply recursive visibility to parent and all children
+                        forceVisibility(node, isVisible);
+                        
+                        // Method 2: Scale Hack (Shrink to nothing)
+                        if (node.scale) {
+                            const s = isVisible ? 1 : 0.0001;
+                            node.scale.set(s, s, s);
+                        }
                     }
                 }
             });
@@ -76,9 +83,9 @@
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                const nodes = getNodes();
+                const nodes = getModelNodes();
                 statusBar.innerText = "READY: " + nodes.length + " OBJECTS TRACKED";
-                updateAssembly(5); 
+                updateAssembly(5);
             }, 800);
         });
     </script>
