@@ -7,7 +7,6 @@
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
         body { margin: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; }
-        /* A subtle gradient background makes the model edges look sharper than pure white */
         model-viewer { 
             width: 100vw; height: 100vh; display: block; 
             background: radial-gradient(circle, #ffffff 0%, #f0f0f0 100%);
@@ -20,7 +19,6 @@
         }
         .slider { width: 100%; accent-color: #FF6B00; margin: 15px 0; cursor: pointer; }
         .label { color: #FF6B00; font-weight: 800; font-size: 20px; margin-bottom: 5px; }
-        #status-bar { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -31,7 +29,6 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Syncing Rhino Data...</div>
         </div>
     </model-viewer>
 
@@ -39,36 +36,43 @@
         const viewer = document.getElementById('viewer');
         const slider = document.getElementById('assemblySlider');
         const stepDisplay = document.getElementById('stepDisplay');
-        const statusBar = document.getElementById('status-bar');
+        
+        let cachedParts = []; // This is our "Quick List" to prevent lag
 
-        function getNodes() {
-            if (!viewer.model) return [];
+        function initPerformanceCaching() {
+            if (!viewer.model) return;
+            
+            // Find the hidden Symbol hierarchy
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hierarchySymbol = symbols.find(s => s.toString().includes('hierarchy'));
-            return viewer.model[hierarchySymbol] || viewer.model.nodes || [];
-        }
+            const nodes = viewer.model[hierarchySymbol] || viewer.model.nodes || [];
 
-        // CHEAT: This forces the materials to be "Metallic-Rough" 
-        // which helps them catch light on the edges even if they are just flat colors.
-        function applyMaterialPolish() {
-            if (!viewer.model) return;
-            viewer.model.materials.forEach(mat => {
-                // Adjusting roughness and metalness creates natural gradients on faces
-                mat.pbrMetallicRoughness.setRoughnessFactor(0.4); 
-                mat.pbrMetallicRoughness.setBaseColorFactor([
-                    mat.pbrMetallicRoughness.baseColorFactor[0],
-                    mat.pbrMetallicRoughness.baseColorFactor[1],
-                    mat.pbrMetallicRoughness.baseColorFactor[2],
-                    1.0 // Ensure full opacity
-                ]);
+            // Pre-filter ONLY the parts we care about so we don't loop through junk
+            cachedParts = nodes.filter(node => {
+                const name = node.name || "";
+                return name.toLowerCase().includes("part_");
+            }).map(node => {
+                // Pre-calculate the part number for each node
+                const matches = node.name.match(/\d+/);
+                return {
+                    node: node,
+                    num: matches ? parseInt(matches[0]) : 0
+                };
             });
         }
 
-        function toggleVisibility(node, isVisible) {
+        function applyMaterialPolish() {
+            if (!viewer.model) return;
+            viewer.model.materials.forEach(mat => {
+                mat.pbrMetallicRoughness.setRoughnessFactor(0.4); 
+            });
+        }
+
+        function toggleDeep(node, isVisible) {
             node.visible = isVisible;
             if (node.mesh) node.mesh.visible = isVisible;
             if (node.children) {
-                node.children.forEach(child => toggleVisibility(child, isVisible));
+                node.children.forEach(child => toggleDeep(child, isVisible));
             }
             if (node.scale) {
                 const s = isVisible ? 1 : 0;
@@ -78,32 +82,26 @@
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getNodes();
-            nodes.forEach(node => {
-                const name = node.name || "";
-                if (name.toLowerCase().includes("part_")) {
-                    const matches = name.match(/\d+/);
-                    if (matches) {
-                        const partNum = parseInt(matches[0]);
-                        const isVisible = (partNum === step);
-                        toggleVisibility(node, isVisible);
-                    }
-                }
+            
+            // Instead of searching the whole model, we use our cached "Quick List"
+            cachedParts.forEach(item => {
+                const isVisible = (item.num === step);
+                toggleDeep(item.node, isVisible);
             });
         }
 
         slider.addEventListener('input', (e) => {
-            updateAssembly(parseInt(e.target.value));
+            // Use requestAnimationFrame to sync with the screen's refresh rate
+            requestAnimationFrame(() => {
+                updateAssembly(parseInt(e.target.value));
+            });
         });
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                applyMaterialPolish(); // Apply the visual "cheat"
-                const nodes = getNodes();
-                if (nodes.length > 0) {
-                    statusBar.innerText = "READY: " + nodes.length + " NODES UNLOCKED";
-                    updateAssembly(5); 
-                }
+                applyMaterialPolish();
+                initPerformanceCaching(); // Build the fast list once
+                updateAssembly(5); 
             }, 500);
         });
     </script>
