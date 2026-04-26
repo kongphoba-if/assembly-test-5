@@ -24,7 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Syncing Mesh Hierarchy...</div>
+            <div id="status-bar">Syncing Mesh Geometry...</div>
         </div>
     </model-viewer>
 
@@ -34,57 +34,53 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        function getModelNodes() {
+        function getNodes() {
             if (!viewer.model) return [];
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hSym = symbols.find(s => s.toString().includes('hierarchy'));
             return viewer.model.nodes || viewer.model[hSym] || [];
         }
 
-        // THE GHOST FUNCTION: Reaches deep into the mesh and hides the actual material
-        function forceVisibility(node, isVisible) {
+        // RECURSIVE HIDE: Deep-dives into every mesh and sub-material
+        function setTransparency(node, isVisible) {
+            // 1. Standard visibility
             node.visible = isVisible;
             
-            // If the node has children (your 2 objects per layer), hide them too
+            // 2. Teleport (Move underground if hidden)
+            if (node.translation) {
+                node.originalY = node.originalY || node.translation.y;
+                node.translation.set(node.translation.x, isVisible ? node.originalY : -1000, node.translation.z);
+            }
+
+            // 3. Children (For your 2-mesh branches)
             if (node.children) {
-                node.children.forEach(child => forceVisibility(child, isVisible));
+                node.children.forEach(child => setTransparency(child, isVisible));
             }
         }
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getModelNodes();
-            if (nodes.length === 0) return;
+            const nodes = getNodes();
 
             nodes.forEach(node => {
                 const name = node.name || "";
                 if (name.toLowerCase().includes("part_")) {
-                    const matches = name.match(/\d+/); 
+                    const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
-                        const isVisible = (partNum <= step);
-                        
-                        // Apply recursive visibility to parent and all children
-                        forceVisibility(node, isVisible);
-                        
-                        // Method 2: Scale Hack (Shrink to nothing)
-                        if (node.scale) {
-                            const s = isVisible ? 1 : 0.0001;
-                            node.scale.set(s, s, s);
-                        }
+                        const show = (partNum <= step);
+                        setTransparency(node, show);
                     }
                 }
             });
         }
 
-        slider.addEventListener('input', (e) => {
-            updateAssembly(parseInt(e.target.value));
-        });
+        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                const nodes = getModelNodes();
-                statusBar.innerText = "READY: " + nodes.length + " OBJECTS TRACKED";
+                const nodes = getNodes();
+                statusBar.innerText = "READY: " + nodes.length + " NODES SYNCED";
                 updateAssembly(5);
             }, 800);
         });
