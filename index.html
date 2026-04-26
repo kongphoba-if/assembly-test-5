@@ -24,7 +24,11 @@
 <body>
 
     <model-viewer id="viewer" src="assembly.glb" ar ar-modes="webxr scene-viewer quick-look" 
-                  camera-controls environment-image="legacy" exposure="1.2" 
+                  camera-controls 
+                  camera-orbit="auto auto 150%" 
+                  max-camera-orbit="auto auto 400%"
+                  min-camera-orbit="auto auto 5%"
+                  environment-image="legacy" exposure="1.2" 
                   shadow-intensity="2" shadow-softness="0.5">
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
@@ -78,21 +82,16 @@
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            
             cachedParts.forEach(item => {
                 const isVisible = (item.num === step);
                 toggleDeep(item.node, isVisible);
             });
-
-            // THE FIX: This forces the 3D viewer to re-render the pixels immediately
-            // without waiting for a user click or internal timer.
             if (typeof viewer.queueRender === 'function') {
                 viewer.queueRender();
             }
         }
 
         slider.addEventListener('input', (e) => {
-            // We use direct execution here for maximum "snappiness"
             updateAssembly(parseInt(e.target.value));
         });
 
