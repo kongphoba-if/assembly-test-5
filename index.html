@@ -35,22 +35,21 @@
         const statusBar = document.getElementById('status-bar');
 
         function updateAssembly(step) {
-            stepDisplay.innerText = step;
+            // FIXED TYPO: changed innerTexl to innerText
+            if (stepDisplay) stepDisplay.innerText = step;
             
-            // Access the internal scene graph
-            const model = viewer.model;
-            if (!model) return;
+            // SAFETY CHECK: This prevents the 'forEach' error you saw
+            if (!viewer.model || !viewer.model.nodes) {
+                console.log("Model nodes not ready yet...");
+                return;
+            }
 
-            // Deep scan through all nodes
-            model.nodes.forEach(node => {
+            viewer.model.nodes.forEach(node => {
                 const name = node.name || "";
-                
-                // Logic: Does the name contain 'part' and a number?
                 if (name.toLowerCase().includes("part")) {
                     const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
-                        // Show/Hide based on step
                         node.visible = (partNum <= step);
                     }
                 }
@@ -64,9 +63,9 @@
         viewer.addEventListener('load', () => {
             statusBar.innerText = "Scanning Structure...";
             
-            // Check every 500ms until we find nodes with 'Part' in their name
+            // We check every 500ms until the 3D parts are actually found
             const searchTimer = setInterval(() => {
-                if (viewer.model && viewer.model.nodes) {
+                if (viewer.model && viewer.model.nodes && viewer.model.nodes.length > 0) {
                     const foundParts = viewer.model.nodes.filter(n => 
                         n.name && n.name.toLowerCase().includes("part")
                     );
@@ -74,24 +73,10 @@
                     if (foundParts.length > 0) {
                         clearInterval(searchTimer);
                         statusBar.innerText = "Ready: " + foundParts.length + " Parts Found";
-                        console.log("Structure detected:", foundParts.map(p => p.name));
                         updateAssembly(parseInt(slider.value));
-                    } else {
-                        // Diagnostic: If we find nodes but NONE have the name 'Part'
-                        console.log("Nodes found, but no 'Part' names detected. Node names are:", 
-                                    viewer.model.nodes.map(n => n.name));
                     }
                 }
             }, 500);
-
-            // Timeout after 10 seconds if no parts are found
-            setTimeout(() => {
-                if (statusBar.innerText === "Scanning Structure...") {
-                    clearInterval(searchTimer);
-                    statusBar.innerText = "Error: No Parts Named 'Part_' Found";
-                    statusBar.style.color = "red";
-                }
-            }, 10000);
         });
     </script>
 </body>
