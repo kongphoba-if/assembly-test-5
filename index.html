@@ -34,37 +34,37 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        // This function digs into the "Private" hierarchy of the 3D model
-        function getAllNodes() {
+        // Finds the hidden part list inside the model
+        function getNodes() {
             if (!viewer.model) return [];
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-            // Return the hidden hierarchy or the standard nodes list
-            return viewer.model[hSym] || viewer.model.nodes || [];
+            return viewer.model.nodes || viewer.model[hSym] || [];
+        }
+
+        // RECURSIVE HIDE: This forces the node AND all its hidden children to hide
+        function toggleNode(node, isVisible) {
+            node.visible = isVisible;
+            // If the node has children (sub-meshes), we force them too
+            if (node.children) {
+                node.children.forEach(child => toggleNode(child, isVisible));
+            }
         }
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getAllNodes();
+            const nodes = getNodes();
 
             nodes.forEach(node => {
                 const name = node.name || "";
-                // If it's part of our assembly sequence
                 if (name.toLowerCase().includes("part_")) {
                     const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
-                        const isVisible = (partNum <= step);
-
-                        // FORCE HIDE: We apply visibility to the node AND its mesh data
-                        node.visible = isVisible;
+                        const show = (partNum <= step);
                         
-                        // We also set the scale to 0 as a backup. 
-                        // If it refuses to be "invisible", it will be too small to see.
-                        if (node.scale) {
-                            const s = isVisible ? 1 : 0;
-                            node.scale.set(s, s, s);
-                        }
+                        // Apply the recursive toggle
+                        toggleNode(node, show);
                     }
                 }
             });
@@ -76,9 +76,9 @@
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                const nodes = getAllNodes();
+                const nodes = getNodes();
                 statusBar.innerText = "READY: " + nodes.length + " OBJECTS TRACKED";
-                updateAssembly(5); // Start with full model
+                updateAssembly(5); 
             }, 800);
         });
     </script>
