@@ -24,7 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Detecting Hierarchy...</div>
+            <div id="status-bar">Syncing Scene...</div>
         </div>
     </model-viewer>
 
@@ -34,26 +34,44 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        // This function finds the hidden "nodes" list using the Symbols we found in the console
-        function getNodes() {
+        // Robust way to find nodes across all viewer versions
+        function getModelNodes() {
             if (!viewer.model) return [];
+            // Try standard API first, fallback to internal hierarchy if needed
+            if (viewer.model.nodes && viewer.model.nodes.length > 0) return viewer.model.nodes;
+            
             const symbols = Object.getOwnPropertySymbols(viewer.model);
-            const hierarchySym = symbols.find(s => s.toString().includes('hierarchy'));
-            return viewer.model.nodes || viewer.model[hierarchySym] || [];
+            const hSym = symbols.find(s => s.toString().includes('hierarchy'));
+            return viewer.model[hSym] || [];
         }
 
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getNodes();
+            const nodes = getModelNodes();
+            if (nodes.length === 0) return;
+
+            console.log("--- Applying Step " + step + " ---");
 
             nodes.forEach(node => {
                 const name = node.name || "";
                 if (name.toLowerCase().includes("part_")) {
-                    // This extracts the number from names like "Part_001" or "Part_001_1"
                     const matches = name.match(/\d+/); 
                     if (matches) {
                         const partNum = parseInt(matches[0]);
-                        node.visible = (partNum <= step);
+                        const isVisible = (partNum <= step);
+                        
+                        // DEEP TOGGLE: We hide the node AND its underlying objects
+                        node.visible = isVisible;
+                        
+                        // Some nodes have internal mesh data that needs manual toggle
+                        if (node.mesh) node.mesh.visible = isVisible;
+                        
+                        // If it's a Group/Layer, hide all nested children too
+                        if (node.children) {
+                            node.children.forEach(child => {
+                                child.visible = isVisible;
+                            });
+                        }
                     }
                 }
             });
@@ -64,18 +82,18 @@
         });
 
         viewer.addEventListener('load', () => {
-            // Wait 500ms for the internal hierarchy to finish building
             setTimeout(() => {
-                const nodesFound = getNodes();
-                const parts = nodesFound.filter(n => n.name && n.name.includes("Part_"));
+                const nodes = getModelNodes();
+                const parts = nodes.filter(n => n.name && n.name.includes("Part_"));
                 
                 if (parts.length > 0) {
-                    statusBar.innerText = "READY: " + parts.length + " SEQUENCE NODES";
-                    updateAssembly(parseInt(slider.value));
+                    statusBar.innerText = "READY: " + parts.length + " PARTS SYNCED";
+                    // Initialize at Step 5 (Full Model)
+                    updateAssembly(5); 
                 } else {
-                    statusBar.innerText = "ERROR: NO NAMED PARTS DETECTED";
+                    statusBar.innerText = "ERROR: NAME MISMATCH";
                 }
-            }, 500);
+            }, 800); // Wait slightly longer for the engine to warm up
         });
     </script>
 </body>
