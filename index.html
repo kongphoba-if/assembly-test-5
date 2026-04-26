@@ -1,71 +1,52 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Assembly Visualizer</title>
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
-    <style>
-        body { margin: 0; background: #ffffff; font-family: sans-serif; overflow: hidden; }
-        model-viewer { width: 100vw; height: 100vh; }
+<script>
+    const viewer = document.getElementById('viewer');
+    const slider = document.getElementById('assemblySlider');
+    const stepDisplay = document.getElementById('stepDisplay');
+    const status = document.getElementById('status');
+
+    function updateAssembly(step) {
+        stepDisplay.innerText = step;
         
-        /* Fixed UI Panel - Ensuring it's always visible */
-        .ui-panel {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 25px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.1); width: 280px; text-align: center; z-index: 999;
+        // SAFETY CHECK: If the model or nodes aren't ready, stop here and don't crash
+        if (!viewer.model || !viewer.model.nodes) {
+            console.log("Waiting for nodes to be ready...");
+            return;
         }
-        .slider { width: 100%; accent-color: #FF6B00; margin: 10px 0; cursor: pointer; }
-        .label { color: #FF6B00; font-weight: 800; font-size: 18px; margin-bottom: 5px; }
-        #status { font-size: 10px; color: #999; text-transform: uppercase; }
-    </style>
-</head>
-<body>
 
-    <model-viewer id="viewer" src="assembly.glb" ar camera-controls environment-image="neutral" exposure="1.0">
-        <div class="ui-panel">
-            <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
-            <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status">Waiting for model...</div>
-        </div>
-    </model-viewer>
-
-    <script>
-        const viewer = document.getElementById('viewer');
-        const slider = document.getElementById('assemblySlider');
-        const stepDisplay = document.getElementById('stepDisplay');
-        const status = document.getElementById('status');
-
-        function updateAssembly(step) {
-            stepDisplay.innerText = step;
-            if (!viewer.model) return;
-
-            // Fuzzy search through all nodes
-            viewer.model.nodes.forEach(node => {
-                if (node.name && node.name.includes("Part_")) {
-                    const parts = node.name.split('_');
-                    const num = parseInt(parts[parts.length - 1]);
-                    if (!isNaN(num)) {
-                        node.visible = (num <= step);
-                    }
+        // Loop through EVERY object. 
+        // This will find BOTH your green mesh and your grey meshes!
+        viewer.model.nodes.forEach(node => {
+            if (node.name && node.name.toLowerCase().includes("part_")) {
+                
+                // Extract the number (e.g., finds 001 in "Part_001")
+                const matches = node.name.match(/\d+/);
+                if (matches) {
+                    const partNum = parseInt(matches[0]);
+                    // Toggle visibility based on the slider
+                    node.visible = (partNum <= step);
                 }
-            });
-        }
-
-        slider.addEventListener('input', (e) => {
-            updateAssembly(parseInt(e.target.value));
+            }
         });
+    }
 
-        viewer.addEventListener('load', () => {
-            status.innerText = "Model Loaded Successfully";
-            console.log("Nodes found:", viewer.model.nodes.map(n => n.name));
-            updateAssembly(5);
-        });
+    slider.addEventListener('input', (e) => {
+        updateAssembly(parseInt(e.target.value));
+    });
 
-        viewer.addEventListener('error', (e) => {
-            status.innerText = "Error: Cannot find assembly.glb";
-            status.style.color = "red";
-        });
-    </script>
-</body>
-</html>
+    // We wait for the 'load' event, then add a tiny 100ms delay 
+    // to make sure the "nodes" list is fully built.
+    viewer.addEventListener('load', () => {
+        setTimeout(() => {
+            console.log("--- MODEL DATA READY ---");
+            
+            // Check if nodes exist now
+            if (viewer.model && viewer.model.nodes) {
+                const names = viewer.model.nodes.map(n => n.name).filter(n => n != null);
+                console.log("Names found in file:", names);
+                status.innerText = "Model Ready: " + names.length + " objects found";
+            }
+            
+            updateAssembly(parseInt(slider.value));
+        }, 100); 
+    });
+</script>
