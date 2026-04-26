@@ -24,7 +24,7 @@
         <div class="ui-panel">
             <div class="label">STEP: <span id="stepDisplay">5</span> / 5</div>
             <input type="range" min="1" max="5" value="5" class="slider" id="assemblySlider">
-            <div id="status-bar">Initializing Engine...</div>
+            <div id="status-bar">Syncing Hidden Hierarchy...</div>
         </div>
     </model-viewer>
 
@@ -34,49 +34,55 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        // This function digs through the entire 3D tree to find your parts
-        function findAndToggleParts(node, step) {
-            const name = node.name || "";
-            if (name.toLowerCase().includes("part_")) {
-                const matches = name.match(/\d+/);
-                if (matches) {
-                    const partNum = parseInt(matches[0]);
-                    node.visible = (partNum <= step);
-                    
-                    // Also shrink hidden parts to 0 so they can't be clicked
-                    if (node.scale) {
-                        const s = (partNum <= step) ? 1 : 0.0001;
-                        node.scale.set(s, s, s);
-                    }
-                }
-            }
-            // Recurse: check every child of this node
-            if (node.children) {
-                node.children.forEach(child => findAndToggleParts(child, step));
-            }
-        }
-
         function updateAssembly(step) {
-            if (stepDisplay) stepDisplay.innerText = step;
+            stepDisplay.innerText = step;
             if (!viewer.model) return;
 
-            // We search the entire scene graph
-            findAndToggleParts(viewer.model, step);
+            // ACCESS THE HIDDEN DRAWER:
+            // Find all Symbols on the model object
+            const symbols = Object.getOwnPropertySymbols(viewer.model);
+            // Look for the specific one that holds the hierarchy
+            const hierarchySymbol = symbols.find(s => s.toString().includes('hierarchy'));
+            
+            if (hierarchySymbol) {
+                const nodes = viewer.model[hierarchySymbol];
+                nodes.forEach(node => {
+                    const name = node.name || "";
+                    if (name.toLowerCase().includes("part_")) {
+                        const matches = name.match(/\d+/);
+                        if (matches) {
+                            const partNum = parseInt(matches[0]);
+                            const isVisible = (partNum <= step);
+                            
+                            // Apply visibility
+                            node.visible = isVisible;
+                            // Apply scale (secondary safety)
+                            if (node.scale) {
+                                const s = isVisible ? 1 : 0.0001;
+                                node.scale.set(s, s, s);
+                            }
+                        }
+                    }
+                });
+            }
         }
 
-        slider.addEventListener('input', (e) => updateAssembly(parseInt(e.target.value)));
+        slider.addEventListener('input', (e) => {
+            updateAssembly(parseInt(e.target.value));
+        });
 
         viewer.addEventListener('load', () => {
-            statusBar.innerText = "Scanning 3D Structure...";
-            
-            // Loop until the 3D data is actually parsed and ready
-            const checkReady = setInterval(() => {
-                if (viewer.model) {
-                    clearInterval(checkReady);
-                    statusBar.innerText = "READY: SYSTEM SYNCED";
+            // Wait briefly for the engine to finish indexing the symbols
+            setTimeout(() => {
+                const symbols = Object.getOwnPropertySymbols(viewer.model);
+                const hSym = symbols.find(s => s.toString().includes('hierarchy'));
+                if (hSym && viewer.model[hSym]) {
+                    statusBar.innerText = "READY: " + viewer.model[hSym].length + " NODES UNLOCKED";
                     updateAssembly(5);
+                } else {
+                    statusBar.innerText = "ERROR: SYSTEM LOCKED";
                 }
-            }, 200);
+            }, 500);
         });
     </script>
 </body>
