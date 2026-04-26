@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assembly Visualizer</title>
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
     <style>
@@ -34,42 +34,35 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        function getNodes() {
-            if (!viewer.model) return [];
-            const symbols = Object.getOwnPropertySymbols(viewer.model);
-            const hSym = symbols.find(s => s.toString().includes('hierarchy'));
-            return viewer.model.nodes || viewer.model[hSym] || [];
-        }
-
-        // RECURSIVE HIDE: Deep-dives into every mesh and sub-material
-        function setTransparency(node, isVisible) {
-            // 1. Standard visibility
-            node.visible = isVisible;
-            
-            // 2. Teleport (Move underground if hidden)
-            if (node.translation) {
-                node.originalY = node.originalY || node.translation.y;
-                node.translation.set(node.translation.x, isVisible ? node.originalY : -1000, node.translation.z);
-            }
-
-            // 3. Children (For your 2-mesh branches)
-            if (node.children) {
-                node.children.forEach(child => setTransparency(child, isVisible));
-            }
-        }
-
         function updateAssembly(step) {
             stepDisplay.innerText = step;
-            const nodes = getNodes();
+            if (!viewer.model) return;
 
-            nodes.forEach(node => {
+            // We use a deep traversal to find every single mesh, even those hidden in groups
+            viewer.model.nodes.forEach(node => {
                 const name = node.name || "";
                 if (name.toLowerCase().includes("part_")) {
                     const matches = name.match(/\d+/);
                     if (matches) {
                         const partNum = parseInt(matches[0]);
-                        const show = (partNum <= step);
-                        setTransparency(node, show);
+                        const isVisible = (partNum <= step);
+
+                        // METHOD 1: VISIBILITY
+                        node.visible = isVisible;
+
+                        // METHOD 2: SCALE (Shrink to zero)
+                        if (node.scale) {
+                            const s = isVisible ? 1 : 0.0001;
+                            node.scale.set(s, s, s);
+                        }
+
+                        // METHOD 3: TRANSLATION (Move underground)
+                        if (node.translation) {
+                            // Store the original Y position once so we can return to it
+                            if (node.origY === undefined) node.origY = node.translation.y;
+                            const yPos = isVisible ? node.origY : -500;
+                            node.translation.set(node.translation.x, yPos, node.translation.z);
+                        }
                     }
                 }
             });
@@ -79,10 +72,10 @@
 
         viewer.addEventListener('load', () => {
             setTimeout(() => {
-                const nodes = getNodes();
-                statusBar.innerText = "READY: " + nodes.length + " NODES SYNCED";
+                const count = viewer.model.nodes.length;
+                statusBar.innerText = "READY: " + count + " NODES SYNCED";
                 updateAssembly(5);
-            }, 800);
+            }, 500);
         });
     </script>
 </body>
