@@ -34,12 +34,11 @@
         const stepDisplay = document.getElementById('stepDisplay');
         const statusBar = document.getElementById('status-bar');
 
-        // Robust way to find nodes across all viewer versions
         function getModelNodes() {
             if (!viewer.model) return [];
-            // Try standard API first, fallback to internal hierarchy if needed
+            // Try standard nodes list first
             if (viewer.model.nodes && viewer.model.nodes.length > 0) return viewer.model.nodes;
-            
+            // Fallback to internal hierarchy symbol if the public API is empty
             const symbols = Object.getOwnPropertySymbols(viewer.model);
             const hSym = symbols.find(s => s.toString().includes('hierarchy'));
             return viewer.model[hSym] || [];
@@ -50,7 +49,7 @@
             const nodes = getModelNodes();
             if (nodes.length === 0) return;
 
-            console.log("--- Applying Step " + step + " ---");
+            console.log("--- UPDATING TO STEP " + step + " ---");
 
             nodes.forEach(node => {
                 const name = node.name || "";
@@ -60,18 +59,18 @@
                         const partNum = parseInt(matches[0]);
                         const isVisible = (partNum <= step);
                         
-                        // DEEP TOGGLE: We hide the node AND its underlying objects
+                        // 1. Set Visibility (Standard)
                         node.visible = isVisible;
                         
-                        // Some nodes have internal mesh data that needs manual toggle
-                        if (node.mesh) node.mesh.visible = isVisible;
-                        
-                        // If it's a Group/Layer, hide all nested children too
-                        if (node.children) {
-                            node.children.forEach(child => {
-                                child.visible = isVisible;
-                            });
+                        // 2. Set Scale (The "Aggressive" Fix)
+                        // If it should be hidden, we shrink it to 0. If shown, back to 1.
+                        if (node.scale) {
+                            const s = isVisible ? 1 : 0;
+                            node.scale.set(s, s, s);
                         }
+
+                        // Log to console so you can verify it's working
+                        if (!isVisible) console.log("Hiding Part: " + name);
                     }
                 }
             });
@@ -87,13 +86,13 @@
                 const parts = nodes.filter(n => n.name && n.name.includes("Part_"));
                 
                 if (parts.length > 0) {
-                    statusBar.innerText = "READY: " + parts.length + " PARTS SYNCED";
-                    // Initialize at Step 5 (Full Model)
-                    updateAssembly(5); 
+                    statusBar.innerText = "READY: " + parts.length + " NODES SYNCED";
+                    // Set initial state (show all)
+                    updateAssembly(5);
                 } else {
-                    statusBar.innerText = "ERROR: NAME MISMATCH";
+                    statusBar.innerText = "ERROR: CHECK RHINO NAMES";
                 }
-            }, 800); // Wait slightly longer for the engine to warm up
+            }, 800);
         });
     </script>
 </body>
